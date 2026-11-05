@@ -82,8 +82,8 @@
     "build:plugins": "babel-node tools/build-plugins.js",
     "build:vendor": "babel-node tools/build-vendor",
     "build": "npm run build:lib:min && npm run build:lib:unmin && npm run compress",
-    "build:lib:min": "LIB_ENTRY=form-builder vite build --config vite.config.lib.js && LIB_ENTRY=form-render vite build --config vite.config.lib.js",
-    "build:lib:unmin": "LIB_ENTRY=form-builder vite build --mode unminified --config vite.config.lib.js && LIB_ENTRY=form-render vite build --mode unminified --config vite.config.lib.js",
+    "build:lib:min": "cross-env LIB_ENTRY=form-builder vite build --config vite.config.lib.js && cross-env LIB_ENTRY=form-render vite build --config vite.config.lib.js",
+    "build:lib:unmin": "cross-env LIB_ENTRY=form-builder vite build --mode unminified --config vite.config.lib.js && cross-env LIB_ENTRY=form-render vite build --mode unminified --config vite.config.lib.js",
     "build:all": "run-s build:plugins build:vendor build copy",
     "compress": "babel-node tools/compress.js",
     "copy": "cp -a dist/* demo/assets/js/ && cp CONTRIBUTING.md docs/contributing.md && cp LICENSE docs/license.md && npm run copy:lang",
@@ -101,7 +101,7 @@
     "start": "run-s build:vendor copy:lang && vite --config vite.config.demo.js",
     "dev": "npm run start",
     "test": "vitest run --coverage",
-    "prepare": "[ \"$NODE_ENV\" = production ] && exit 0; husky install",
+    "prepare": "husky install || exit 0",
     "pre-commit": "lint-staged"
   },
   "dependencies": {
