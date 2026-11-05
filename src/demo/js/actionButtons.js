@@ -14,9 +14,16 @@ export const builderActions = {
     console.log($('.build-wrap').formBuilder('getData'))
   },
   setData: () => {
-    const { value } = document.getElementById('set-form-data-value')
-    window.sessionStorage.setItem('formData', value)
-    $('.build-wrap').formBuilder('setData', value)
+    const fb = $('.build-wrap').formBuilder
+    const dataInput = fb('markup', 'textarea', fb('getData', 'json', true), {
+      id: 'setData-value',
+      rows: 30,
+      style: 'width: 100%',
+    })
+    const click = () => $('.build-wrap').formBuilder('setData', dataInput.value)
+    const setDataButton = fb('markup', 'button', 'Set Data', { events: { click } })
+    const dialogContents = fb('markup', 'div', [dataInput, setDataButton])
+    fb('showDialog', dialogContents, null, 'data-dialog')
   },
   save: () => {
     $('.build-wrap').formBuilder('save')
@@ -52,6 +59,9 @@ export const builderActions = {
   getFieldTypes: () => console.log($('.build-wrap').formBuilder('getFieldTypes')),
 }
 
+const formData =
+  '[{"type":"autocomplete","label":"Autocomplete","className":"form-control","name":"autocomplete-1526094918549","requireValidOption":true,"values":[{"label":"Option 1","value":"option-1"},{"label":"Option 2","value":"option-2"},{"label":"Option 3","value":"option-3"}],"userData":["option-1"]},{"type":"checkbox-group","label":"Checkbox Group","name":"checkbox-group-1526095813035","other":true,"values":[{"label":"Option 1","value":"option-1"},{"label":"Option 2","value":"option-2"}],"userData":["option-1","Bilbo \\"baggins\\""]},{"type":"text","label":"Color Field","name":"text-1526099104236","subtype":"color","userData":["#00ff00"]},{"type":"text","label":"Text Field","name":"text-1526099104236","subtype":"tel","userData":["123-456-7890"]},{"type":"date","label":"Date Field","className":"form-control","name":"date-1526096579821","userData":["2018-01-01"]},{"type":"number","label":"Number","className":"form-control","name":"number-1526099204594","min":"1","max":"3","step":".2","userData":["1.1"]},{"type":"textarea","label":"Text Area","className":"form-control","name":"textarea-1526099273610","subtype":"textarea","userData":["Tennessee Welcomes You!"]},{"type":"textarea","subtype":"tinymce","label":"TinyMCE","className":"form-control","name":"textarea-1526099273610","userData":["&lt;p&gt;&lt;span style=&quot;color: #339966;&quot;&gt;It&#39;s a great place&lt;/span&gt;&lt;/p&gt;"]}]'
+
 export const renderActions = {
   loadUserForm: () => {
     const formRenderOptions = {
@@ -67,12 +77,11 @@ export const renderActions = {
             'link',
             'alignleft aligncenter alignright alignjustify',
             'numlist bullist outdent indent',
-            'preview'
-          ].join(' | ')
+            'preview',
+          ].join(' | '),
         },
       },
-      formData:
-        '[{"type":"autocomplete","label":"Autocomplete","className":"form-control","name":"autocomplete-1526094918549","requireValidOption":true,"values":[{"label":"Option 1","value":"option-1"},{"label":"Option 2","value":"option-2"},{"label":"Option 3","value":"option-3"}],"userData":["option-1"]},{"type":"checkbox-group","label":"Checkbox Group","name":"checkbox-group-1526095813035","other":true,"values":[{"label":"Option 1","value":"option-1"},{"label":"Option 2","value":"option-2"}],"userData":["option-1","Bilbo \\"baggins\\""]},{"type":"text","label":"Color Field","name":"text-1526099104236","subtype":"color","userData":["#00ff00"]},{"type":"text","label":"Text Field","name":"text-1526099104236","subtype":"tel","userData":["123-456-7890"]},{"type":"date","label":"Date Field","className":"form-control","name":"date-1526096579821","userData":["2018-01-01"]},{"type":"number","label":"Number","className":"form-control","name":"number-1526099204594","min":"1","max":"3","step":".2","userData":["1.1"]},{"type":"textarea","label":"Text Area","className":"form-control","name":"textarea-1526099273610","subtype":"textarea","userData":["Tennessee Welcomes You!"]},{"type":"textarea","subtype":"tinymce","label":"TinyMCE","className":"form-control","name":"textarea-1526099273610","userData":["&lt;p&gt;&lt;span style=&quot;color: #339966;&quot;&gt;It&#39;s a great place&lt;/span&gt;&lt;/p&gt;"]}]',
+      formData,
     }
     $('.render-wrap').formRender(formRenderOptions)
   },
@@ -87,6 +96,12 @@ export const renderActions = {
   getHTML: () => {
     console.log($('.render-wrap').formRender('html'))
   },
+  setData: () => {
+    $('.render-wrap').formRender('setData', formData)
+  },
+  render: () => {
+    $('.render-wrap').formRender('render')
+  },
   showUserData: () => {
     alert(JSON.stringify($('.render-wrap').formRender('userData')))
   },
@@ -99,8 +114,8 @@ export const demoActions = {
     console.log('Can submit: ', form.checkValidity())
     // Display the key/value pairs
     console.log('FormData:')
-    for (var pair of formData.entries()) {
-      console.log(`${pair[0]}: ${pair[1]}`)
+    for (const [key, val] of formData.entries()) {
+      console.log(`${key}: ${val}`)
     }
   },
   resetDemo: () => {
@@ -151,15 +166,15 @@ export const generateActionTable = (actions, columns) => {
     code.appendChild(document.createTextNode(key))
     const action = { content: code }
     let actionDemoTrigger = document.getElementById(key)
-    if (!actionDemoTrigger) {
+    if (!actionDemoTrigger && apiBtns[key]) {
       actionDemoTrigger = document.createElement('button')
       actionDemoTrigger.id = key
       actionDemoTrigger.textContent = titleCase(key)
-      actionDemoTrigger.addEventListener('click', e => apiBtns[key] && apiBtns[key](e))
+      actionDemoTrigger.addEventListener('click', e => apiBtns[key](e))
     } else {
       const trigger = actionDemoTrigger.querySelector('.trigger')
-      if (trigger) {
-        trigger.addEventListener('click', e => apiBtns[key] && apiBtns[key](e))
+      if (trigger && apiBtns[key]) {
+        trigger.addEventListener('click', e => apiBtns[key](e))
       }
     }
     const demo = { content: actionDemoTrigger }

@@ -1,5 +1,6 @@
 import mi18n from 'mi18n'
 
+/* istanbul ignore next */
 const noop = () => null
 
 // eslint-disable-next-line
@@ -41,30 +42,40 @@ export const defaultOptions = {
   fieldEditContainer: null, // DOM node or selector
   inputSets: [], // add groups of fields at a time
   notify: {
-    error: error => {
+    error: /* istanbul ignore next */ error => {
       console.log(error)
     },
-    success: success => {
+    success:  /* istanbul ignore next */ success => {
       console.log(success)
     },
-    warning: warning => {
+    warning: /* istanbul ignore next */ warning => {
       console.warn(warning)
     },
   },
-  onAddField: (fieldId, fieldData) => fieldData,
-  onAddOption: obj => obj,
+  onAddField: /* istanbul ignore next */ (fieldId, fieldData) => fieldData,
+  onAddFieldAfter: /* istanbul ignore next */ (fieldId, fieldData) => fieldData,
+  onAddOption: /* istanbul ignore next */ obj => obj,
   onClearAll: noop,
   onCloseFieldEdit: noop,
   onOpenFieldEdit: noop,
+  onRemoveField: noop,
   /**
    * @param {Object} evt
    * @param {Object} formData
    */
   onSave: noop,
+  persistDefaultFields: false,
   prepend: false,
   replaceFields: [],
   roles: {
     1: 'Administrator',
+  },
+  sanitizerOptions: {
+    clobberingProtection: {
+      document: false,
+      form: false,
+    },
+    backendOrder: [], //'dompurify','sanitizer','fallback'
   },
   scrollToFieldOnAdd: true,
   showActionButtons: true,
@@ -82,6 +93,10 @@ export const defaultOptions = {
   typeUserAttrs: {},
   typeUserDisabledAttrs: {},
   typeUserEvents: {},
+  defaultGridColumnClass: 'col-md-12',
+  cancelGridModeDistance: 100,
+  enableColumnInsertMenu: false,
+  enableEnhancedBootstrapGrid: false,
 }
 
 export const styles = {
@@ -92,4 +107,15 @@ export const defaultI18n = {
   location: 'assets/lang/',
 }
 
-export const config = {}
+export const instanceConfig = {}
+
+export const gridClassNames = {
+  rowWrapperClass: 'rowWrapper',
+  colWrapperClass: 'colWrapper',
+  tmpRowPlaceholderClass: 'tempRowWrapper',
+  invisibleRowPlaceholderClass: 'invisibleRowPlaceholder',
+}
+
+export const defaultTimeout = 333
+
+export const defaultFieldSelector = 'li.form-field'

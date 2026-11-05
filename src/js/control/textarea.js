@@ -3,6 +3,7 @@ import control from '../control'
 /**
  * Text input class
  * Output a <input type="text" ... /> form element
+ * @extends control
  */
 export default class controlTextarea extends control {
   /**
@@ -23,6 +24,8 @@ export default class controlTextarea extends control {
    */
   build() {
     const { value = '', ...attrs } = this.config
+    //Textareas do not have an attribute 'type'
+    delete attrs['type']
     this.field = this.markup('textarea', this.parsedHtml(value), attrs)
     return this.field
   }
@@ -33,13 +36,13 @@ export default class controlTextarea extends control {
   onRender() {
     // Set userData if available
     if (this.config.userData) {
-      $('#' + this.config.name).val(this.config.userData[0])
+      $(this.field).val(this.config.userData[0])
     }
   }
 
   /**
    * extend the default events to add a prerender for textareas
-   * @param {String} eventType
+   * @param {string} eventType
    * @return {Function} prerender function
    */
   on(eventType) {

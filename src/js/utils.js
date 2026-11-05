@@ -1,3 +1,4 @@
+import { setElementContent, sanitizeNamedAttribute, isPotentiallyDangerousAttribute } from './sanitizer'
 /**
  * Cross file utilities for working with arrays,
  * sorting and other fun stuff
@@ -13,11 +14,15 @@ window.fbEditors = {
 }
 
 /**
- * Remove null or undefined values
- * @param  {Object} attrs {attrName: attrValue}
- * @return {Object}       Object trimmed of null or undefined values
+ * Remove null, undefined, empty string or empty array values from an object, original object is not modified
+ * @param  {Object} obj {attrName: attrValue}
+ * @param {boolean} [removeFalse=false] Remove values === false
+ * @return {Object} Object trimmed of null or undefined values
  */
-export const trimObj = function(attrs, removeFalse = false) {
+export const trimObj = function (obj, removeFalse = false) {
+  if (null == obj || typeof obj !== 'object') return obj
+  const attrs = (typeof window.structuredClone === 'function') ? window.structuredClone(obj) : Object.assign({}, obj)
+  /** @type {(null|undefined|''|false)[]} xmlRemove */
   const xmlRemove = [null, undefined, '']
   if (removeFalse) {
     xmlRemove.push(false)
@@ -37,10 +42,10 @@ export const trimObj = function(attrs, removeFalse = false) {
 
 /**
  * Test if attribute is a valid HTML attribute
- * @param  {String} attr
- * @return {Boolean}
+ * @param  {string} attr
+ * @return {boolean}
  */
-export const validAttr = function(attr) {
+export const validAttr = function (attr) {
   const invalid = [
     'values',
     'enableOther',
@@ -76,8 +81,8 @@ export const attrString = attrs =>
 
 /**
  * Convert attributes to markup safe strings
- * @param  {String} name  attribute name
- * @param  {String} value attribute value
+ * @param  {string} name  attribute name
+ * @param  {string} value attribute value
  * @return {Object}       {attrName: attrValue}
  */
 export const safeAttr = (name, value) => {
@@ -119,15 +124,29 @@ export const safeAttrName = name => {
 }
 
 /**
+ * Converts a className string to a safe CSS class name by replacing bracket notation with hyphens.
+ * Transforms square bracket notation (e.g., "class[name]") to hyphen-separated format (e.g., "class-name").
+ * 
+ * @param {string} className - The className string to be sanitized
+ * @returns {string} The sanitized className with brackets replaced by hyphens
+ * 
+ * @example
+ * safeClassName('form[field]') // returns 'form-field'
+ * safeClassName('input[name][value]') // returns 'input-name-value'
+ */
+export const safeClassName = className => className.replace(/\[([^\]]+)\]/g, '-$1')
+
+/**
  * Convert strings into lowercase-hyphen
  *
- * @param  {String} str
- * @return {String}
+ * @param  {string} str
+ * @return {string}
  */
 export const hyphenCase = str => {
   // eslint-disable-next-line no-useless-escape
-  str = str.replace(/[^\w\s\-]/gi, '')
-  str = str.replace(/([A-Z])/g, function($1) {
+  str = str.replace(/[^\w\s\-\[\]]/gi, '')
+  str = safeClassName(str)
+  str = str.replace(/([A-Z])/g, function ($1) {
     return '-' + $1.toLowerCase()
   })
 
@@ -136,14 +155,14 @@ export const hyphenCase = str => {
 
 /**
  * convert a hyphenated string to camelCase
- * @param  {String} str
- * @return {String}
+ * @param  {string} str
+ * @return {string}
  */
 export const camelCase = str => str.replace(/-([a-z])/g, (m, w) => w.toUpperCase())
 
 /**
  * Bind events to an element
- * @param  {Object} element DOM element
+ * @param  {EventTarget} element DOM element
  * @param  {Object} events  object full of events eg. {click: evt => callback}
  * @return {void}
  */
@@ -160,18 +179,28 @@ export const bindEvents = (element, events) => {
 /**
  * Generate a unique name attribute
  * @param  {Object} field
- * @return {String}       name
+ * @return {string}       name
  */
-export const nameAttr = function(field) {
-  const epoch = new Date().getTime()
-  const prefix = field.type || hyphenCase(field.label)
-  return prefix + '-' + epoch
-}
+export const nameAttr = (function () {
+  let lepoch
+  let counter = 0
+  return function (field) {
+    const epoch = Date.now()
+    if (epoch === lepoch) {
+      ++counter
+    } else {
+      counter = 0
+      lepoch = epoch
+    }
+    const prefix = field.type || hyphenCase(field.label)
+    return prefix + '-' + epoch + '-' + counter
+  }
+})()
 
 /**
  * Determine content type
  * @param  {Node | String | Array | Object} content
- * @return {String}
+ * @return {string}
  */
 export const getContentType = content => {
   if (content === undefined) {
@@ -181,7 +210,7 @@ export const getContentType = content => {
   return [
     ['array', content => Array.isArray(content)],
     ['node', content => content instanceof window.Node || content instanceof window.HTMLElement],
-    ['component', () => content && content.dom],
+    ['component', () => content?.dom],
     [typeof content, () => true],
   ].find(typeCondition => typeCondition[1](content))[0]
 }
@@ -189,19 +218,19 @@ export const getContentType = content => {
 /**
  * Generate markup wrapper where needed
  *
- * @param  {string}              tag
- * @param  {String|Array|Object} content we wrap this
- * @param  {Object}              attributes
- * @return {Object} DOM Element
+ * @param  {string} tag Tag name
+ * @param  {string|Array|object|Node|Function|null} content content to wrap
+ * @param  {Object} attributes attributes to assign to element
+ * @return {HTMLElement} DOM Element
  */
-export const markup = function(tag, content = '', attributes = {}) {
+export const markup = function (tag, content = '', attributes = {}) {
   let contentType = getContentType(content)
   const { events, ...attrs } = attributes
   const field = document.createElement(tag)
 
   const appendContent = {
     string: content => {
-      field.innerHTML += content
+      setElementContent(field, field.innerHTML + content)
     },
     object: config => {
       const { tag, content, ...data } = config
@@ -221,14 +250,30 @@ export const markup = function(tag, content = '', attributes = {}) {
       contentType = getContentType(content)
       appendContent[contentType](content)
     },
-    undefined: () => {},
+    undefined: () => { },
   }
 
   for (const attr in attrs) {
     if (attrs.hasOwnProperty(attr)) {
       const name = safeAttrName(attr)
-      const attrVal = Array.isArray(attrs[attr]) ? unique(attrs[attr].join(' ').split(' ')).join(' ') : attrs[attr]
-      field.setAttribute(name, attrVal)
+      let attrVal = Array.isArray(attrs[attr]) ? unique(attrs[attr].join(' ').split(' ')).join(' ') : attrs[attr]
+      //If the Sanitizer is disabled this will always return false
+      if (isPotentiallyDangerousAttribute(name, attrVal)) {
+        continue
+      }
+      if (typeof attrVal === 'boolean') {
+        if (attrVal === true) {
+          const val = name === 'contenteditable' ? true : name
+          field.setAttribute(name, val)
+        }
+      } else {
+        if (name === 'id' || name === 'name') {
+          attrVal = sanitizeNamedAttribute(attrVal)
+        }
+        if (attrVal !== undefined) {
+          field.setAttribute(name, attrVal)
+        }
+      }
     }
   }
 
@@ -243,10 +288,11 @@ export const markup = function(tag, content = '', attributes = {}) {
 
 /**
  * Convert html element attributes to key/value object
- * @param  {Object} elem DOM element
+ * @private
+ * @param  {Element} elem DOM element
  * @return {Object} ex: {attrName: attrValue}
  */
-export const parseAttrs = elem => {
+export const xmlParseAttrs = elem => {
   const attrs = elem.attributes
   const data = {}
   forEach(attrs, attr => {
@@ -267,15 +313,16 @@ export const parseAttrs = elem => {
 
 /**
  * Convert field options to optionData
+ * @private
  * @param  {NodeList} options  DOM elements
  * @return {Array} optionData array
  */
-export const parseOptions = options => {
+export const xmlParseOptions = options => {
   const data = []
 
   for (let i = 0; i < options.length; i++) {
     const optionData = {
-      ...parseAttrs(options[i]),
+      ...xmlParseAttrs(options[i]),
       label: options[i].textContent,
     }
     data.push(optionData)
@@ -286,13 +333,14 @@ export const parseOptions = options => {
 
 /**
  * Convert field user data to userData
+ * @private
  * @param  {NodeList} userData  DOM elements
  * @return {Array} optionData array
  */
-export const parseUserData = userData => {
+export const xmlParseUserData = userData => {
   const data = []
 
-  if(userData.length){
+  if (userData.length) {
     const values = userData[0].getElementsByTagName('value')
 
     for (let i = 0; i < values.length; i++) {
@@ -305,7 +353,7 @@ export const parseUserData = userData => {
 
 /**
  * Parse XML formData
- * @param  {String} xmlString
+ * @param  {string} xmlString
  * @return {Array}            formData array
  */
 export const parseXML = xmlString => {
@@ -316,16 +364,16 @@ export const parseXML = xmlString => {
   if (xml) {
     const fields = xml.getElementsByTagName('field')
     for (let i = 0; i < fields.length; i++) {
-      const fieldData = parseAttrs(fields[i])
+      const fieldData = xmlParseAttrs(fields[i])
       const options = fields[i].getElementsByTagName('option')
       const userData = fields[i].getElementsByTagName('userData')
 
       if (options && options.length) {
-        fieldData.values = parseOptions(options)
+        fieldData.values = xmlParseOptions(options)
       }
 
       if (userData && userData.length) {
-        fieldData.userData = parseUserData(userData)
+        fieldData.userData = xmlParseUserData(userData)
       }
 
       formData.push(fieldData)
@@ -337,8 +385,8 @@ export const parseXML = xmlString => {
 
 /**
  * Converts escaped HTML into usable HTML
- * @param  {String} html escaped HTML
- * @return {String}      parsed HTML
+ * @param  {string} html escaped HTML
+ * @return {string}      parsed HTML
  */
 export const parsedHtml = html => {
   const escapeElement = document.createElement('textarea')
@@ -348,8 +396,8 @@ export const parsedHtml = html => {
 
 /**
  * Escape markup so it can be displayed rather than rendered
- * @param  {String} html markup
- * @return {String}      escaped html
+ * @param  {string} html markup
+ * @return {string}      escaped html
  */
 export const escapeHtml = html => {
   const escapeElement = document.createElement('textarea')
@@ -371,7 +419,7 @@ export const escapeAttr = str => {
   return typeof str === 'string' ? str.replace(/["&<>]/g, replaceTag) : str
 }
 
-// Escape attributes
+// Escape attributes @TODO Find usage?
 export const escapeAttrs = attrs => {
   for (const attr in attrs) {
     if (attrs.hasOwnProperty(attr)) {
@@ -383,7 +431,7 @@ export const escapeAttrs = attrs => {
 }
 
 // forEach that can be used on nodeList
-export const forEach = function(array, callback, scope) {
+export const forEach = function (array, callback, scope) {
   for (let i = 0; i < array.length; i++) {
     callback.call(scope, i, array[i]) // passes back stuff we need
   }
@@ -400,7 +448,7 @@ export const unique = array => {
 
 /**
  * Removes a value from an array
- * @param  {String|Number} val
+ * @param  {string|Number} val
  * @param  {Array} arr
  */
 export const removeFromArray = (val, arr) => {
@@ -413,11 +461,11 @@ export const removeFromArray = (val, arr) => {
 
 /**
  * Loads an array of scripts using jQuery's `getScript`
- * @param  {Array|String}  scriptScr    scripts
- * @param  {String} path   optional to load form
+ * @param  {string[]|string}  scriptScr    scripts
+ * @param  {String} [path='']   optional to load form
  * @return {Promise}       a promise
  */
-export const getScripts = (scriptScr, path) => {
+export const getScripts = (scriptScr, path = '') => {
   const $ = jQuery
   let _arr = []
 
@@ -443,28 +491,22 @@ export const getScripts = (scriptScr, path) => {
 
 /**
  * Checks if remote resource is already loaded
- * @param  {String|Array} src  url of remote script or css
- * @param  {String}       type       'js' or 'css'
- * @return {Boolean}      isCached
+ * @param  {string|Array} src  url of remote script or css
+ * @param  {'js'|'css'}       [type='js']  type of remote resource
+ * @return {boolean}      isCached
  */
 export const isCached = (src, type = 'js') => {
-  let isCached = false
   const cache = window.fbLoaded[type]
-  if (Array.isArray(src)) {
-    isCached = src.every(s => cache.includes(s))
-  } else {
-    isCached = cache.includes(src)
-  }
-  return isCached
+  return (Array.isArray(src)) ? src.every(s => cache.includes(s)) : cache.includes(src)
 }
 
 /**
  * Appends stylesheets to the head
  * @param  {Array} scriptScr
- * @param  {String} path
+ * @param  {String} [path='']
  * @return {void}
  */
-export const getStyles = (scriptScr, path) => {
+export const getStyles = (scriptScr, path = '') => {
   if (!Array.isArray(scriptScr)) {
     scriptScr = [scriptScr]
   }
@@ -478,8 +520,8 @@ export const getStyles = (scriptScr, path) => {
     if (typeof src == 'object') {
       type = src.type || (src.style ? 'inline' : 'href')
       id = src.id
-      src = type == 'inline' ? src.style : src.href
       key = id || src.href || src.style
+      src = type === 'inline' ? src.style : src.href
     }
 
     // check we haven't already loaded this css
@@ -488,16 +530,14 @@ export const getStyles = (scriptScr, path) => {
     }
 
     // append the style into the head
-    if (type == 'href') {
+    if (type === 'href') {
       const link = document.createElement('link')
       link.type = 'text/css'
       link.rel = 'stylesheet'
       link.href = (path || '') + src
       document.head.appendChild(link)
     } else {
-      $(`<style type="text/css">${src}</style>`)
-        .attr('id', id)
-        .appendTo($(document.head))
+      $(`<style type="text/css">${src}</style>`).attr('id', id).appendTo($(document.head))
     }
 
     // record this is cached
@@ -507,11 +547,11 @@ export const getStyles = (scriptScr, path) => {
 
 /**
  * Capitalizes a string
- * @param  {String} str uncapitalized string
- * @return {String} str capitalized string
+ * @param  {string} str uncapitalized string
+ * @return {string} str capitalized string
  */
 export const capitalize = str => {
-  return str.replace(/\b\w/g, function(m) {
+  return str.replace(/\b\w/g, function (m) {
     return m.toUpperCase()
   })
 }
@@ -533,9 +573,9 @@ export const merge = (obj1, obj2) => {
 }
 
 /**
- *
+ * Apply the same event listener to multiple events
  * @param {Node} el
- * @param {String} evts events to bind to
+ * @param {string} evts events to bind to
  * @param {Function} cb
  * @return {Array} events
  */
@@ -544,7 +584,7 @@ export const addEventListeners = (el, evts, cb) => evts.split(' ').forEach(e => 
 /**
  * Find the closest parent by class
  * @param  {Object} el  DOM element
- * @param  {String} cls class
+ * @param  {string} cls class
  * @return {Object}     DOM Element
  */
 export const closest = (el, cls) => {
@@ -556,28 +596,27 @@ export const closest = (el, cls) => {
 /**
  * Add a mobile class
  * @todo find css only solution
- * @return {String} Mobile class added to formBuilder
+ * @return {string} Mobile class added to formBuilder
  */
 export const mobileClass = () => {
   let mobileClass = ''
-  ;(a => {
-    // eslint-disable-next-line
-    if (
-      /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(
-        a,
-      )
-    ) {
-      mobileClass = 'formbuilder-mobile'
-    }
-  })(navigator.userAgent || navigator.vendor || window.opera)
+    ; (a => {
+      if (
+        /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(
+          a,
+        )
+      ) {
+        mobileClass = 'formbuilder-mobile'
+      }
+    })(navigator.userAgent || navigator.vendor || window.opera)
   return mobileClass
 }
 
 /**
  * Make strings safe to be used as classes
  *
- * @param  {String} str string to be converted
- * @return {String}     converter string
+ * @param  {string} str string to be converted
+ * @return {string}     converted string
  */
 export const safename = str => {
   return str.replace(/\s/g, '-').replace(/[^a-zA-Z0-9[\]_-]/g, '')
@@ -591,9 +630,14 @@ export const safename = str => {
  */
 export const forceNumber = str => str.replace(/[^0-9]/g, '')
 
-// subtract the contents of 1 array from another
+/**
+ * subtract the contents of 1 array from another
+ * @param {Array} arr
+ * @param {Array} from
+ * @returns {Array}
+ */
 export const subtract = (arr, from) => {
-  return from.filter(function(a) {
+  return from.filter(function (a) {
     return !~this.indexOf(a)
   }, arr)
 }
@@ -624,10 +668,21 @@ export const removeStyle = id => {
   return elem.parentElement.removeChild(elem)
 }
 
+export const bootstrapColumnRegex = /^col-(xs|sm|md|lg)-([^\s]+)/
+
+/**
+ * Returns Array of classNames related to Bootstrap
+ * @param {string} className
+ * @returns {string[]}
+ */
+export const getAllGridRelatedClasses = className => {
+  return (typeof className === 'string') ? className.split(' ').filter(x => bootstrapColumnRegex.test(x) || x.startsWith('row-')) : []
+}
+
 /**
  *
- * @param {String} str
- * @return {String} titleized string
+ * @param {string} str
+ * @return {string} titleized string
  */
 export function titleCase(str) {
   const lowers = [
@@ -656,8 +711,12 @@ export function titleCase(str) {
   const regex = new RegExp(`(?!${lowers.join('|')})\\w\\S*`, 'g')
   return `${str}`.replace(
     regex,
-    txt => txt.charAt(0).toUpperCase() + txt.substr(1).replace(/[A-Z]/g, word => ` ${word}`),
+    txt => txt.charAt(0).toUpperCase() + txt.slice(1).replace(/[A-Z]/g, word => ` ${word}`),
   )
+}
+
+export function firstNumberOrUndefined(...options) {
+  return options.find(x => typeof x === 'number')
 }
 
 const utils = {
@@ -680,10 +739,7 @@ const utils = {
   merge,
   mobileClass,
   nameAttr,
-  parseAttrs,
   parsedHtml,
-  parseOptions,
-  parseUserData,
   parseXML,
   removeFromArray,
   safeAttr,
@@ -694,6 +750,7 @@ const utils = {
   unique,
   validAttr,
   titleCase,
+  firstNumberOrUndefined,
 }
 
 /**
@@ -721,5 +778,28 @@ utils.splitObject = (obj, keys) => {
     .reduce(reconstructObj(obj), {})
   return [kept, rest]
 }
+
+/**
+ * jQuery function to Swap two elements positions in the dom
+ * @param {Node} that
+ * @returns {Node}
+ */
+$.fn.swapWith = function (that) {
+  const $this = this
+  const $that = $(that)
+
+  // create temporary placeholder
+  const $temp = $('<div>')
+
+  // 3-step swap
+  $this.before($temp)
+  $that.before($this)
+  $temp.before($that).remove()
+
+  return $this
+}
+
+export const generateSelectorClassNames = classNamesObj =>
+  Object.entries(classNamesObj).reduce((acc, [key, val]) => ({ ...acc, [`${key}Selector`]: `.${val}` }), {})
 
 export default utils
